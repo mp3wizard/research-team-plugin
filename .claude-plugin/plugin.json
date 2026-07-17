@@ -1,6 +1,6 @@
 {
   "name": "research-team",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Multi-channel research fan-out for Claude Code — routes each angle to the channel that can actually reach it (repo→codex, X→grok, video→watch/NotebookLM, web→wigolo/anysearch, cache→wigolo) and synthesizes in the main loop.",
   "author": {
     "name": "mp3wizard"
