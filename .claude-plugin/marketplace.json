@@ -1,0 +1,21 @@
+{
+  "name": "research-team",
+  "owner": {
+    "name": "mp3wizard"
+  },
+  "description": "Multi-channel research fan-out, as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "research-team",
+      "source": "./",
+      "description": "Routes each research angle to the channel that can actually reach it and synthesizes in the main loop. Adds wigolo (local cache + web) and watch (video) to the roster.",
+      "category": "productivity",
+      "keywords": [
+        "research",
+        "web-search",
+        "fan-out",
+        "wigolo"
+      ]
+    }
+  ]
+}
