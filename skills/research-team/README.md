@@ -11,7 +11,8 @@ synthesizes in the main loop. See [SKILL.md](./SKILL.md) for the full process.
 | codex | local repo, git history, `gh` |
 | web-agent | blogs, forums, docs, non-X social |
 | anysearch | general web + full-page extract (second source / fallback) |
-| grok x_search | X/Twitter (the only native-X channel) |
+| ~~grok x_search~~ | X/Twitter — ⚠️ **broken — verified 2026-07-27, re-verified 2026-08-27** (no `x_search` tool exists; turns self-cancel). Not a usable channel |
+| pwm / Perplexity | Perplexity's index — risk/assessment framing, **indexed** X posts + Reddit (`-s social`), academic papers, SEC filings, paywalled connectors. Not real-time X |
 | watch | video you need to *see* — real frames + transcript, local (short clips/demos) |
 | NotebookLM | long video/podcast/audio + PDFs — semantic Q&A |
 | browser | login-walled / heavy-JS pages |
@@ -39,13 +40,16 @@ bash scripts/setup-research-team.sh
 ### CLI channels (per machine)
 
 ```bash
-# grok  (native X search)
+# grok  (X search) — ⚠️ currently broken, see SKILL.md “Channel notes”; install only to re-verify
 curl -fsSL https://x.ai/cli/install.sh | bash      # macOS / Linux
 #   Windows PowerShell:  irm https://x.ai/cli/install.ps1 | iex
 grok login
 
 # codex  (repo / git / gh)
 npm i -g @openai/codex
+
+# pwm  (Perplexity: indexed X/Reddit, academic, finance, paywalled connectors)
+#   install + login per the perplexity-web-mcp skill; check quota with `pwm usage`
 
 # wigolo  (local web engine + cross-session cache) — wires itself into the agents you name
 npx wigolo init --agents=claude-code,codex
@@ -73,7 +77,7 @@ claude mcp add --transport http --scope user apify https://mcp.apify.com
 | wayfinder self-heal block | ✅ | — |
 | global `~/.claude/CLAUDE.md` rule | via `setup-research-team.sh` | run once |
 | git hooks | via `setup-research-team.sh` | run once |
-| grok / codex CLI | ❌ | install + login |
+| grok / codex / pwm CLI | ❌ | install + login |
 | wigolo engine + `~/.wigolo/` cache | ❌ | `npx wigolo init` per machine (cache is local, never syncs) |
 | watch (ffmpeg/yt-dlp + `~/.config/watch/.env`) | ❌ | first `/watch` run installs deps + scaffolds config |
 | MCP auth (Apify, …) | ❌ | add + authenticate |

@@ -16,7 +16,8 @@ channels are per-machine CLI/MCP installs (secrets never ride in a plugin).
 | codex | local repo, git history, `gh` |
 | web-agent | blogs, forums, docs, non-X social |
 | anysearch | general web + full-page extract (second source / fallback) |
-| grok x_search | X/Twitter (the only native-X channel) |
+| ~~grok x_search~~ | X/Twitter — ⚠️ **broken — verified 2026-07-27, re-verified 2026-08-27** (no `x_search` tool exists; turns self-cancel). Not a usable channel |
+| pwm / Perplexity | Perplexity's index — risk/assessment framing, **indexed** X posts + Reddit (`-s social`), academic papers, SEC filings, paywalled connectors. Not real-time X |
 | watch | video you need to *see* — real frames + transcript, local (short clips/demos) |
 | NotebookLM | long video/podcast/audio + PDFs — semantic Q&A |
 | browser | login-walled / heavy-JS pages |
@@ -48,11 +49,13 @@ without it; the rule just makes routing non-optional. Idempotent.
 ### Per-machine channels (not shipped in the plugin)
 
 ```bash
-# grok  (native X search)
+# grok  (X search) — ⚠️ currently broken, see SKILL.md “Channel notes”; install only to re-verify
 curl -fsSL https://x.ai/cli/install.sh | bash      # macOS / Linux
 grok login
 # codex  (repo / git / gh)
 npm i -g @openai/codex
+# pwm  (Perplexity: indexed X/Reddit, academic, finance, paywalled connectors)
+#   install + login per the perplexity-web-mcp skill; check quota with `pwm usage`
 # wigolo  (local web engine + cross-session cache)
 npx wigolo init --agents=claude-code,codex
 # watch  (video → frames + transcript): the /watch skill auto-installs ffmpeg/yt-dlp on first run
@@ -65,7 +68,7 @@ npx wigolo init --agents=claude-code,codex
 |---|---|---|
 | the skill (SKILL.md + scripts) | ✅ `claude plugin install` / `update` | — |
 | global CLAUDE.md mandate rule | via `setup-research-team.sh` | run once (optional) |
-| grok / codex / wigolo CLI | ❌ | install + login |
+| grok / codex / wigolo / pwm CLI | ❌ | install + login |
 | wigolo `~/.wigolo/` cache, watch `~/.config/watch/.env` | ❌ | local, never sync |
 | MCP auth (anysearch, notebooklm, Apify) | ❌ | add + authenticate |
 

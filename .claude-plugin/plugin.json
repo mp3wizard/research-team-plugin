@@ -1,7 +1,7 @@
 {
   "name": "research-team",
   "version": "0.2.0",
-  "description": "Multi-channel research fan-out for Claude Code — routes each angle to the channel that can actually reach it (repo→codex, X→grok, video→watch/NotebookLM, web→wigolo/anysearch, cache→wigolo) and synthesizes in the main loop.",
+  "description": "Multi-channel research fan-out for Claude Code — routes each angle to the channel that can actually reach it (repo→codex, X/academic/finance→pwm (Perplexity), video→watch/NotebookLM, web→wigolo/anysearch, cache→wigolo) and synthesizes in the main loop.",
   "author": {
     "name": "mp3wizard"
   },
@@ -12,6 +12,8 @@
     "web-search",
     "fan-out",
     "wigolo",
+    "pwm",
+    "perplexity",
     "multi-channel",
     "productivity"
   ],
