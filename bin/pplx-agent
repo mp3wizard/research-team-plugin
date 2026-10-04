@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Perplexity Agent API run (pay-per-call, needs PERPLEXITY_API_KEY).
+# Submits in background mode, polls to a terminal status, prints the answer,
+# the de-duplicated search_results sources, and the metered cost.
+#
+#   pplx-agent <fast|low|medium|high|xhigh> "<question>"
+#
+# Presets (Perplexity-managed): low = everyday lookup, medium = multi-hop,
+# high = deep research (replaces sonar-deep-research), xhigh = agentic + sandbox.
+# PPLX_TIMEOUT (seconds, default 1200) caps the polling wait.
+set -euo pipefail
+
+preset=${1:?usage: pplx-agent <fast|low|medium|high|xhigh> \"<question>\"}
+question=${2:?usage: pplx-agent <fast|low|medium|high|xhigh> \"<question>\"}
+: "${PERPLEXITY_API_KEY:?PERPLEXITY_API_KEY is not set - create one at https://console.perplexity.ai/project/keys and export it}"
+
+api=https://api.perplexity.ai/v1/agent
+hdr=(-H "Authorization: Bearer $PERPLEXITY_API_KEY" -H "Content-Type: application/json")
+body=$(jq -n --arg p "$preset" --arg q "$question" '{
+  preset: $p, background: true,
+  input: ($q + "\n\nCite sources inline using bracketed markers, one source per bracket, like [1][2].")
+}')
+
+r=$(curl -sS "${hdr[@]}" -d "$body" "$api")
+id=$(jq -r '.id // empty' <<<"$r")
+[ -n "$id" ] || { echo "submit failed: $r" >&2; exit 1; }
+echo "submitted $preset run $id (GET $api/$id to fetch it if this script dies)" >&2
+
+# ponytail: fixed 5s polling; switch to stream=true + reconnect if runs get long
+deadline=$((SECONDS + ${PPLX_TIMEOUT:-1200}))
+while :; do
+  status=$(jq -r '.status' <<<"$r")
+  case $status in completed|failed|cancelled|incomplete) break ;; esac
+  if (( SECONDS >= deadline )); then
+    echo "timeout, run still '$status' - fetch later: curl -H 'Authorization: Bearer \$PERPLEXITY_API_KEY' $api/$id" >&2
+    exit 2
+  fi
+  sleep 5
+  r=$(curl -sS "${hdr[@]}" "$api/$id")
+done
+
+jq -r '
+  "status: \(.status)  id: \(.id)\n",
+  (.output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | .text),
+  "\n## Sources",
+  ([.output[]? | select(.type == "search_results") | .results[]?] | unique_by(.url)[] | "[\(.id)] \(.url)"),
+  "\ncost_usd: \(.usage.cost.total_cost // "n/a")"
+' <<<"$r"
+[ "$status" = completed ] || { jq '.error // empty' <<<"$r" >&2; exit 1; }

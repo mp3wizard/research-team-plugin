@@ -8,7 +8,7 @@
 #
 # Idempotent — safe to re-run; it no-ops if the rule is already present.
 #
-# CLI/MCP channels (grok, codex, wigolo, anysearch, notebooklm, apify) are
+# CLI/MCP channels (grok, codex, pplx, wigolo, anysearch, notebooklm, apify) are
 # per-machine installs — see this skill's "Setup on a new machine" section.
 set -euo pipefail
 
@@ -25,7 +25,7 @@ cat >> "$CLAUDE_MD" <<'RULE'
 
 ## Research Workflow
 
-Any task that gathers external information — web lookups, "หาข้อมูล/ค้นเพิ่ม", investigating tools/libraries/topics, community reactions, video content, repo history — MUST follow the `research-team` skill (multi-channel fan-out: wigolo cache→memory, wigolo/anysearch/web-agent→web, codex→repo/git, grok x_search→X/Twitter, watch→video-you-must-see, NotebookLM→long media, browser→blocked pages; synthesize in the main loop). Apify is a paid last-resort scraping channel (~$5 credit) — never call it without confirming cost with the user first; see the skill's budget gate.
+Any task that gathers external information — web lookups, "หาข้อมูล/ค้นเพิ่ม", investigating tools/libraries/topics, community reactions, video content, repo history — MUST follow the `research-team` skill (multi-channel fan-out: wigolo cache→memory, wigolo/anysearch/web-agent→web, codex→repo/git, grok→X/Twitter, pplx (Perplexity API)→assessment/academic/deep research, watch→video-you-must-see, NotebookLM→long media, browser→blocked pages; synthesize in the main loop). Apify is a paid last-resort scraping channel (~$5 credit) — never call it without confirming cost with the user first; see the skill's budget gate.
 
 This applies at every entry point:
 - `/wayfinder` — research tickets resolve via research-team; when charting a map, add "Research tickets follow the research-team skill" to the map's `## Notes`.
