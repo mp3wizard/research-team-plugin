@@ -24,6 +24,12 @@ channels are per-machine CLI/MCP installs (secrets never ride in a plugin).
 | browser | login-walled / heavy-JS pages |
 | Apify ⚠️paid | public Facebook/social scrapes — last resort, ~$5 credit |
 
+**Judgment layer — Jev (TypeSafe).** Not a channel: it retrieves nothing. `jev` (plugin `bin/`, on PATH)
+returns typed judgments on evidence the channels already found — `jev rank` orders search hits by
+relevance, `jev check` marks a claim verified / contradicted / unsupported / fabricated against its
+fetched source (numbers and quotes are checked in code). No prose, so synthesis stays in the main
+loop. ~$0.04 per million input tokens. Verified 2026-10-09 on `jev-1.13.0`.
+
 See [skills/research-team/SKILL.md](./skills/research-team/SKILL.md) for the full
 process, sizing rules, and channel notes.
 
@@ -59,6 +65,8 @@ npm i -g @openai/codex
 #   install per https://docs.perplexity.ai/docs/cli/overview, then:
 pplx auth login
 export PERPLEXITY_API_KEY=...   # also needed by pplx-agent (add to your shell profile)
+# jev  (TypeSafe judgment layer — script ships in the plugin's bin/, needs curl + jq)
+export TYPESAFE_API_KEY=...     # or put this line in ~/.config/typesafe/env
 # wigolo  (local web engine + cross-session cache)
 npx wigolo init --agents=claude-code,codex
 # watch  (video → frames + transcript): the /watch skill auto-installs ffmpeg/yt-dlp on first run
@@ -71,7 +79,7 @@ npx wigolo init --agents=claude-code,codex
 |---|---|---|
 | the skill (SKILL.md + scripts) | ✅ `claude plugin install` / `update` | — |
 | global CLAUDE.md mandate rule | via `setup-research-team.sh` | run once (optional) |
-| grok / codex / wigolo / pplx CLI + `PERPLEXITY_API_KEY` | ❌ | install + login |
+| grok / codex / wigolo / pplx CLI + `PERPLEXITY_API_KEY`, `TYPESAFE_API_KEY` | ❌ | install + login |
 | wigolo `~/.wigolo/` cache, watch `~/.config/watch/.env` | ❌ | local, never sync |
 | MCP auth (anysearch, notebooklm, Apify) | ❌ | add + authenticate |
 

@@ -8,7 +8,7 @@
     {
       "name": "research-team",
       "source": "./",
-      "description": "Routes each research angle to the channel that can actually reach it and synthesizes in the main loop. Adds wigolo (local cache + web) and watch (video) to the roster.",
+      "description": "Routes each research angle to the channel that can actually reach it and synthesizes in the main loop. Adds wigolo (local cache + web) and watch (video) to the roster. Jev (TypeSafe) ranks hits and fact-checks claims before synthesis.",
       "category": "productivity",
       "keywords": [
         "research",

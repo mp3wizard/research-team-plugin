@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Jev (TypeSafe System One) judgments for the research-team skill.
+# Jev returns typed answers + probabilities, never prose, so it can triage and
+# verify evidence without competing with the main loop's synthesis.
+#
+#   jev check "<claim>" <source-file|-> [--quote "<verbatim quote>"]
+#       Does the fetched source support the claim? Code first: a --quote that is
+#       not in the source is "fabricated" (no API call), and numbers in the claim
+#       that never appear in the source are listed in numbers_missing (Jev is weak
+#       at numbers - code owns them). Then one Choice on {claim, section}:
+#       supports / contradicts / says_nothing -> verified / contradicted / unsupported.
+#       review=true when confidence < JEV_ACCEPT (default 0.8).
+#   jev rank "<query>" < candidates.txt
+#       One candidate per line (e.g. "url | title | snippet"). One isolated Noul
+#       per (query, candidate) pair, run in parallel; prints "<noul>\t<line>"
+#       sorted highest first. Reorders only - drops nothing.
+#
+# Phrase claims/queries in English: Jev is weakest outside English.
+# Env: TYPESAFE_API_KEY (falls back to ~/.config/typesafe/env), JEV_MODEL
+# (default jev-latest), JEV_ACCEPT, JEV_WINDOW (chars of context each side of a
+# matched quote, default 1500), JEV_MAX_CHARS (source cap, default 24000),
+# JEV_PARALLEL (rank concurrency, default 8).
+set -euo pipefail
+
+usage() { sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+
+if [ -z "${TYPESAFE_API_KEY:-}" ] && [ -f "$HOME/.config/typesafe/env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.config/typesafe/env"
+fi
+: "${TYPESAFE_API_KEY:?TYPESAFE_API_KEY is not set - create one at https://console.typesafe.ai and export it (or put it in ~/.config/typesafe/env)}"
+MODEL=${JEV_MODEL:-jev-latest}
+
+# POST a {state, questions} body; retry 429/529 with backoff, fail fast otherwise.
+ask() {
+  local body=$1 out code try
+  body=$(jq --arg m "$MODEL" '. + {model: $m}' <<<"$body")
+  for try in 1 2 3 4 5; do
+    out=$(curl -sS -w '\n%{http_code}' https://api.typesafe.ai/v1/systemone \
+      -H "Authorization: Bearer $TYPESAFE_API_KEY" -H "Content-Type: application/json" -d "$body")
+    code=${out##*$'\n'}; out=${out%$'\n'*}
+    case $code in
+      200) printf '%s\n' "$out"; return 0 ;;
+      429|529) sleep $((2 ** try)) ;;
+      *) echo "typesafe HTTP $code: $out" >&2; return 1 ;;
+    esac
+  done
+  echo "typesafe: still rate-limited after 5 tries" >&2; return 1
+}
+
+# one substitution per glyph: a [“”] bracket is split byte-wise by BSD sed
+norm() { tr -s '[:space:]' ' ' | sed "s/“/\"/g; s/”/\"/g; s/‘/'/g; s/’/'/g; s/^ //; s/ \$//"; }
+
+cmd_check() {
+  local claim=${1:?claim required} src=${2:?source file required (or -)} quote="" text section status
+  shift 2
+  [ "${1:-}" = --quote ] && quote=${2:?--quote needs a value}
+  text=$(cat "$src" | norm)
+
+  # Code-owned checks: numbers and verbatim quote.
+  local missing
+  missing=$({ grep -oE '[0-9]+([.,][0-9]+)*%?' <<<"$claim" || true; } | sort -u | while read -r n; do
+    # whole-number match: "25" must not hit "2025", "0.08%" must not hit "10.08%"
+    grep -qE -- "(^|[^0-9.,])${n//./\\.}([^0-9]|\$)" <<<"$text" || printf '%s\n' "$n"; done | jq -R . | jq -sc .)
+
+  if [ -n "$quote" ]; then
+    local q pre
+    q=$(norm <<<"$quote")
+    if ! grep -qF -- "$q" <<<"$text"; then
+      jq -nc --argjson nm "$missing" '{verdict:"fabricated", reason:"quote not in source", confidence:null, review:false, numbers_missing:$nm}'
+      return 0
+    fi
+    pre=${text%%"$q"*}
+    local w=${JEV_WINDOW:-1500} start=$(( ${#pre} > ${JEV_WINDOW:-1500} ? ${#pre} - ${JEV_WINDOW:-1500} : 0 ))
+    section=${text:$start:$(( ${#pre} - start + ${#q} + w ))}
+    status=quote_found
+  else
+    section=${text:0:${JEV_MAX_CHARS:-24000}}
+    status=$([ ${#text} -gt ${JEV_MAX_CHARS:-24000} ] && echo source_truncated || echo whole_source)
+  fi
+
+  local body r
+  body=$(jq -nc --arg c "$claim" --arg s "$section" '{
+    state: {claim: $c, section: $s},
+    questions: {relation: {type: "choice",
+      instructions: "How does the `section` relate to the `claim`?",
+      criteria: {
+        supports: "The section states the claim or directly implies that it is true",
+        contradicts: "The section states the opposite of the claim or implies it is false",
+        says_nothing: "The section does not address what the claim asserts, either way"}}}}')
+  r=$(ask "$body")
+  jq -c --arg st "$status" --argjson nm "$missing" --argjson acc "${JEV_ACCEPT:-0.8}" '
+    .answers.relation as $a | {
+      verdict: ({supports:"verified", contradicts:"contradicted", says_nothing:"unsupported"}[$a.choice]),
+      confidence: $a.confidence, review: ($a.confidence < $acc),
+      probabilities: $a.probabilities, numbers_missing: $nm,
+      context: $st, model: .model, input_tokens: .usage.input_tokens}' <<<"$r"
+}
+
+# One (query, candidate) pair -> "<noul>\t<candidate>". Used by rank via xargs.
+cmd_rank1() {
+  local body r
+  body=$(jq -nc --arg q "$1" --arg c "${2:0:4000}" '{
+    state: {query: $q, candidate: $c},
+    questions: {relevant: {type: "noul",
+      instructions: "Does the `candidate` search result contain information that helps answer the `query`?",
+      criteria: {true: "The result addresses the query topic and likely holds facts that answer it",
+                 false: "The result is off-topic, only shares keywords, or cannot help answer the query"}}}}')
+  r=$(ask "$body") || { printf 'ERR\t%s\n' "$2"; return 0; }
+  printf '%s\t%s\n' "$(jq -r '.answers.relevant.noul' <<<"$r")" "$2"
+}
+
+cmd_rank() {
+  local query=${1:?query required}
+  grep -v '^[[:space:]]*$' | tr '\n' '\0' |
+    xargs -0 -n1 -P "${JEV_PARALLEL:-8}" "$0" _rank1 "$query" |
+    sort -t$'\t' -k1,1gr
+}
+
+case ${1:-} in
+  check) shift; cmd_check "$@" ;;
+  rank) shift; cmd_rank "$@" ;;
+  _rank1) shift; cmd_rank1 "$@" ;;
+  *) usage ;;
+esac

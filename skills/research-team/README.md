@@ -19,6 +19,12 @@ synthesizes in the main loop. See [SKILL.md](./SKILL.md) for the full process.
 | browser | login-walled / heavy-JS pages |
 | Apify ⚠️paid | public Facebook/social scrapes — last resort, ~$5 credit |
 
+**Judgment layer — Jev (TypeSafe).** Not a channel: it retrieves nothing. `jev` (plugin `bin/`, on PATH)
+returns typed judgments on evidence the channels already found — `jev rank` orders search hits by
+relevance, `jev check` marks a claim verified / contradicted / unsupported / fabricated against its
+fetched source (numbers and quotes are checked in code). No prose, so synthesis stays in the main
+loop. ~$0.04 per million input tokens. Verified 2026-10-09 on `jev-1.13.0`.
+
 ## Install (any machine — macOS / Linux / Windows Code tab)
 
 The skill and its scripts are git-synced by this repo. CLI binaries and MCP
@@ -53,6 +59,8 @@ npm i -g @openai/codex
 #   install per https://docs.perplexity.ai/docs/cli/overview, then:
 pplx auth login
 export PERPLEXITY_API_KEY=...   # also needed by pplx-agent (add to your shell profile)
+# jev  (TypeSafe judgment layer — script ships in the plugin's bin/, needs curl + jq)
+export TYPESAFE_API_KEY=...     # or put this line in ~/.config/typesafe/env
 
 # wigolo  (local web engine + cross-session cache) — wires itself into the agents you name
 npx wigolo init --agents=claude-code,codex
@@ -80,7 +88,7 @@ claude mcp add --transport http --scope user apify https://mcp.apify.com
 | wayfinder self-heal block | ✅ | — |
 | global `~/.claude/CLAUDE.md` rule | via `setup-research-team.sh` | run once |
 | git hooks | via `setup-research-team.sh` | run once |
-| grok / codex / pplx CLI + `PERPLEXITY_API_KEY` | ❌ | install + login |
+| grok / codex / pplx CLI + `PERPLEXITY_API_KEY`, `TYPESAFE_API_KEY` | ❌ | install + login |
 | wigolo engine + `~/.wigolo/` cache | ❌ | `npx wigolo init` per machine (cache is local, never syncs) |
 | watch (ffmpeg/yt-dlp + `~/.config/watch/.env`) | ❌ | first `/watch` run installs deps + scaffolds config |
 | MCP auth (Apify, …) | ❌ | add + authenticate |
