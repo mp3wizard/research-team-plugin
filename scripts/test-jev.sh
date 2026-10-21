@@ -58,4 +58,21 @@ printf '%s\n' \
 top=$("$jev" rank "What does TypeSafe charge per token for Jev?" <"$t/hits.txt" | head -1)
 case $top in *docs.typesafe.ai*) echo "ok   rank order" ;; *) echo "FAIL rank order: $top"; fail=1 ;; esac
 
+# Images: a drawn screen with known shapes (needs ImageMagick; no fonts, so it
+# renders anywhere). Red circle spans x 0.08-0.22, y 0.20-0.40; blue rectangle
+# x 0.60-0.85, y 0.70-0.80.
+if command -v magick >/dev/null; then
+  magick -size 1200x800 xc:white -fill '#d62828' -draw "circle 180,240 260,240" \
+    -fill '#1d4ed8' -draw "rectangle 720,560 1020,640" "$t/shapes.png"
+  expect "see yes" '.answer==true' see "Is there a red circle?" "$t/shapes.png"
+  expect "see no" '.answer==false' see "Is there a person?" "$t/shapes.png"
+  expect "see choice" '.choice=="blue"' see "What colour is the rectangle?" "$t/shapes.png" --options "red|blue|green"
+  near='def near(a; b): (a - b | fabs) <= 0.05;'
+  expect "box edges" "$near"' .present and near(.box.left; 0.60) and near(.box.right; 0.85) and near(.box.top; 0.70) and near(.box.bottom; 0.80)' \
+    box "the blue rectangle" "$t/shapes.png"
+  expect "box absent -> present false" '.present==false' box "a green triangle" "$t/shapes.png"
+else
+  echo "skip images (no ImageMagick)"
+fi
+
 exit $fail

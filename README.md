@@ -29,6 +29,8 @@ returns typed judgments on evidence the channels already found — `jev rank` or
 relevance, `jev check` marks a claim verified / contradicted / unsupported / fabricated against its
 fetched source (numbers and quotes are checked in code). No prose, so synthesis stays in the main
 loop. ~$0.04 per million input tokens. Verified 2026-10-09 on `jev-1.13.0`.
+`jev see` asks a yes/no or multiple-choice question about an image (a screenshot, chart, video frame),
+and `jev box` finds where something is in one; both are TypeSafe "Dreamer-ready" (prototype grade).
 
 See [skills/research-team/SKILL.md](./skills/research-team/SKILL.md) for the full
 process, sizing rules, and channel notes.
