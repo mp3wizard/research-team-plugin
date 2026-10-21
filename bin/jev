@@ -145,6 +145,14 @@ cmd_rank() {
 prep() {
   local src=$1 out=$tmp/image.jpg
   [ -f "$src" ] || { echo "jev: no such image: $src" >&2; exit 66; }
+  # Raster formats only, by content: magick sniffs the bytes, and a vector or
+  # script format (SVG, MVG, MSL, PS) can pull other local files into the image
+  # that goes to the API. "./" keeps a name like "text:x" from picking a coder.
+  case $(file -b --mime-type "$src") in
+    image/png|image/jpeg|image/heic|image/heif|image/webp|image/gif|image/tiff|image/bmp) ;;
+    *) echo "jev: not a raster image (png/jpeg/heic/webp/gif/tiff/bmp): $src" >&2; exit 65 ;;
+  esac
+  case $src in /*) ;; *) src=./$src ;; esac
   if command -v magick >/dev/null; then
     magick "$src[0]" -auto-orient -resize '1568x1568>' -strip -interlace none -quality 90 "$out" ||
       { echo "jev: cannot convert image: $src" >&2; exit 65; }
