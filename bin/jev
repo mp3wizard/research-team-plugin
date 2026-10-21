@@ -14,15 +14,25 @@
 #       One candidate per line (e.g. "url | title | snippet"). One isolated Noul
 #       per (query, candidate) pair, run in parallel; prints "<noul>\t<line>"
 #       sorted highest first. Reorders only - drops nothing.
+#   jev see "<question>" <image> [--options "a|b|c"]
+#       Ask about one image (any format magick/sips can read; fitted to the API
+#       limits first). Yes/no question -> one Noul: answer, noul. With --options
+#       -> one Choice over those names: choice, confidence. review=true when unsure.
+#   jev box "<target>" <image>
+#       Where is the target? One Box - edges as 0-1 fractions of the image's
+#       width/height from the top-left - plus a Noul on whether the target is
+#       there at all (a Box always returns edges, even for something absent).
 #
+# Images and Box are TypeSafe "Dreamer-ready" (prototype grade, may change).
 # Phrase claims/queries in English: Jev is weakest outside English.
 # Env: TYPESAFE_API_KEY (falls back to ~/.config/typesafe/env), JEV_MODEL
-# (default jev-latest), JEV_ACCEPT, JEV_WINDOW (chars of context each side of a
+# (default jev-latest), JEV_BOX_MODEL (default jev-1.14.0, Box needs 1.14),
+# JEV_ACCEPT, JEV_WINDOW (chars of context each side of a
 # matched quote, default 1500), JEV_MAX_CHARS (source cap, default 24000),
 # JEV_PARALLEL (rank concurrency, default 8).
 set -euo pipefail
 
-usage() { sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
+usage() { sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64; }
 
 if [ -z "${TYPESAFE_API_KEY:-}" ] && [ -f "$HOME/.config/typesafe/env" ]; then
   # shellcheck disable=SC1091
@@ -32,12 +42,22 @@ fi
 MODEL=${JEV_MODEL:-jev-latest}
 
 # POST a {state, questions} body; retry 429/529 with backoff, fail fast otherwise.
+# ask <body> [model] [image]: an image goes as the multipart file part "image",
+# which the body's assets map names; image requests need the Danger-Zone header.
 ask() {
-  local body=$1 out code try
-  body=$(jq --arg m "$MODEL" '. + {model: $m}' <<<"$body")
+  local body=$1 img=${3:-} out code try send
+  body=$(jq --arg m "${2:-$MODEL}" '. + {model: $m}' <<<"$body")
+  send=(-H "Content-Type: application/json" -d "$body")
+  if [ -n "$img" ]; then
+    printf '%s' "$body" >"$tmp/request.json"
+    send=(-H "TypeSafe-Danger-Zone-Images: true"
+      -F "request=<$tmp/request.json;type=application/json"
+      -F "image=@\"$img\";type=application/octet-stream")
+  fi
   for try in 1 2 3 4 5; do
     out=$(curl -sS -w '\n%{http_code}' https://api.typesafe.ai/v1/systemone \
-      -H "Authorization: Bearer $TYPESAFE_API_KEY" -H "Content-Type: application/json" -d "$body")
+      -H "Authorization: Bearer $TYPESAFE_API_KEY" "${send[@]}") ||
+      { echo "typesafe: request failed (network)" >&2; return 1; }
     code=${out##*$'\n'}; out=${out%$'\n'*}
     case $code in
       200) printf '%s\n' "$out"; return 0 ;;
@@ -117,8 +137,83 @@ cmd_rank() {
     sort -t$'\t' -k1,1gr
 }
 
+# Fit an image to the API limits (PNG/JPEG still, upright, longest side <= 1568 px)
+# as $tmp/image.jpg. magick also rotates by EXIF (the API ignores it) and strips
+# metadata such as GPS. sips (macOS fallback) only converts and scales: a phone
+# photo keeps its EXIF and may reach the API sideways, so prefer ImageMagick.
+# Images under 280 px a side are left for the API to reject.
+prep() {
+  local src=$1 out=$tmp/image.jpg
+  [ -f "$src" ] || { echo "jev: no such image: $src" >&2; exit 66; }
+  if command -v magick >/dev/null; then
+    magick "$src[0]" -auto-orient -resize '1568x1568>' -strip -interlace none -quality 90 "$out" ||
+      { echo "jev: cannot convert image: $src" >&2; exit 65; }
+  elif command -v sips >/dev/null; then
+    sips -s format jpeg -Z 1568 "$src" --out "$out" >/dev/null ||
+      { echo "jev: cannot convert image: $src" >&2; exit 65; }
+  else
+    echo "jev: images need ImageMagick (magick) or macOS sips" >&2; exit 69
+  fi
+  printf '%s\n' "$out"
+}
+
+# Shared start of an image command: temp dir, prepared image, fresh asset reference.
+image_start() {
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  img=$(prep "$1")
+  ref=$(uuidgen 2>/dev/null || echo "img-$RANDOM$RANDOM$RANDOM")
+}
+
+cmd_see() {
+  local q=${1:?question required} opts="" img ref body r
+  : "${2:?image required}"
+  case $# in
+    2) ;;
+    4) [ "$3" = --options ] || usage; opts=$4 ;;
+    *) usage ;;
+  esac
+  image_start "$2"
+  if [ -n "$opts" ]; then
+    body=$(jq -nc --arg q "$q" --arg o "$opts" --arg ref "$ref" '{
+      state: {image: $ref}, assets: {($ref): {type: "image", part: "image"}},
+      questions: {a: {type: "choice", instructions: "About `image`: \($q)",
+        criteria: ($o | split("|") | map(gsub("^ +| +$"; "")) | map({key: ., value: .}) | from_entries)}}}')
+    r=$(ask "$body" "" "$img")
+    jq -c --argjson acc "${JEV_ACCEPT:-0.8}" '.answers.a as $a | {
+      choice: $a.choice, confidence: $a.confidence, review: ($a.confidence < $acc),
+      probabilities: $a.probabilities, model: .model, input_tokens: .usage.input_tokens}' <<<"$r"
+  else
+    body=$(jq -nc --arg q "$q" --arg ref "$ref" '{
+      state: {image: $ref}, assets: {($ref): {type: "image", part: "image"}},
+      questions: {a: {type: "noul", instructions: "About `image`: \($q)"}}}')
+    r=$(ask "$body" "" "$img")
+    jq -c --argjson acc "${JEV_ACCEPT:-0.8}" '.answers.a.noul as $n | {
+      answer: ($n >= 0.5), noul: $n, review: ($n > 1 - $acc and $n < $acc),
+      model: .model, input_tokens: .usage.input_tokens}' <<<"$r"
+  fi
+}
+
+cmd_box() {
+  local target=${1:?target required} img ref body r
+  : "${2:?image required}"
+  [ $# -eq 2 ] || usage
+  image_start "$2"
+  body=$(jq -nc --arg t "$target" --arg ref "$ref" '{
+    state: {image: $ref}, assets: {($ref): {type: "image", part: "image"}},
+    questions: {
+      present: {type: "noul", instructions: "Is \($t) visible in `image`?"},
+      box: {type: "box", instructions: "\($t) in `image`"}}}')
+  r=$(ask "$body" "${JEV_BOX_MODEL:-jev-1.14.0}" "$img")
+  jq -c --argjson acc "${JEV_ACCEPT:-0.8}" '.answers as $a | ($a.present.noul >= 0.5) as $p | {
+    present: $p, present_noul: $a.present.noul, box: $a.box.box, confidence: $a.box.confidence,
+    review: (($a.present.noul > 1 - $acc and $a.present.noul < $acc) or ($p and $a.box.confidence < $acc)),
+    model: .model, input_tokens: .usage.input_tokens}' <<<"$r"
+}
+
 case ${1:-} in
   check) shift; cmd_check "$@" ;;
+  see) shift; cmd_see "$@" ;;
+  box) shift; cmd_box "$@" ;;
   rank) shift; cmd_rank "$@" ;;
   _rank1) shift; cmd_rank1 "$@" ;;
   *) usage ;;
